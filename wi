@@ -5,9 +5,9 @@ _=$(
 #                                                   #
 #  wi - a lightweight network manager for *nix      #
 #                                                   #
-#  author: proxa                                    #
+#  author: seed419                                  #
 #                                                   #
-#  license: AOL see license for more information    #
+#  license: AOL - see license for more information  #
 #                                                   #
 #===================================================#
 )
@@ -35,7 +35,6 @@ iface=""
 essid=""
 green='\e[0;32m'
 red='\e[0;31m'
-silence=' >/dev/null 2>&1'
 
 #==================
 # Exit error codes
@@ -132,3 +131,5 @@ echo -e "[Starting dhcp]"
 sleep 1
 start_dhcp
 check_connection
+
+# vim: set ft=sh :
