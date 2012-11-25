@@ -1,0 +1,134 @@
+#!/bin/bash 
+
+_=$(
+#===================================================#
+#                                                   #
+#  wi - a lightweight network manager for *nix      #
+#                                                   #
+#  author: proxa                                    #
+#                                                   #
+#  license: AOL see license for more information    #
+#                                                   #
+#===================================================#
+)
+
+#============
+# Debug mode
+#============
+#set -x
+
+#===========
+# Arguments
+#===========
+args=$#
+arg1=$1
+arg2=$2
+
+#==================
+# Script Variables
+#==================
+version='0.0.1-indev'
+usage='Usage:'
+usage_arguments='wi [connection-arguments] [--version] [-h,--help] [-d {interface},--disconnect {interface}]'
+usage_wireless_dhcp_connection='wireless dhcp connection: wi [interface] [essid]'
+iface=""
+essid=""
+green='\e[0;32m'
+red='\e[0;31m'
+silence=' >/dev/null 2>&1'
+
+#==================
+# Exit error codes
+#==================
+not_root=10
+no_arguments=20
+no_connection=30
+cannot_put_interface_down=40
+cannot_associate_with_essid=50
+cannot_put_interface_up=60
+
+#===========
+# Functions
+#===========
+function ensure_root {
+  if [ $EUID != 0 ];then
+    echo -e "${red}You must be root to manage network interfaces"
+    exit $not_root
+  fi
+}
+
+function ensure_arguments {
+  if [ "$arg1" == "--version" ];then
+    echo "wi version $version"
+    exit 0
+  elif [ $args -lt 2 ];then
+    echo "$usage $usage_arguments"
+    echo "    $usage_wireless_dhcp_connection"
+    exit $no_arguments
+  else
+    iface=$arg1
+    essid=$arg2
+  fi  
+}
+
+function put_interface_down {
+  ip link set $iface down >/dev/null 2>&1
+}
+
+function check_exit {
+  if [ $? != 0 ];then
+    echo -e "$red[Connection failed]$reset exit: $1"
+    exit $1
+  fi  
+}
+
+function put_interface_up {
+  ip link set $iface up >/dev/null 2>&1
+}
+
+function associate_with_essid {
+  iwconfig $iface essid $essid >/dev/null 2>&1
+}
+
+function start_dhcp {
+  dhcpcd --quiet $iface >/dev/null 2>&1
+}
+
+function kill_dhcpd {
+  pkill -9 dhcpcd >/dev/null 2>&1
+  rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
+}
+
+function check_connection {
+  ping -c1 www.google.com >/dev/null 2>&1
+  if [ $? == 0 ];then
+    echo -e "$green[Connected to $essid]"
+    exit 0
+  else
+    echo -e "$red[Connection failed]$reset exit: $no_connection"
+    exit $no_connection
+  fi
+}
+
+#===========
+# Execution
+#===========
+ensure_arguments
+ensure_root
+echo -e "[Resetting environment]"
+put_interface_down
+check_exit $cannot_put_interface_down
+kill_dhcpd
+sleep 1
+echo -e "[Associating with $essid]"
+associate_with_essid
+check_exit $cannot_associate_with_essid
+sleep 1
+echo -e "[Putting $iface up]"
+put_interface_up
+check_exit $cannot_put_interface_up
+sleep 1
+echo -e "[Starting dhcp]"
+sleep 1
+start_dhcp
+check_connection
