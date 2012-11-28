@@ -25,15 +25,17 @@ arg2=$2
 #==================
 # Script Variables
 #==================
-version='0.0.1-indev'
+version='0.0.2-indev'
+wi_home=$XDG_CONFIG_HOME/wi
+wi_conf=$wi_home/wi.conf
 usage='Usage:'
 usage_arguments='wi [connection-arguments] [--version] [-h,--help] [-d {interface},--disconnect {interface}]'
 usage_wireless_dhcp_connection='wireless dhcp connection: wi [interface] [essid]'
+usage_wireless_scanning='wireless network scanning: wi scan [interface]'
 iface=""
 essid=""
 green='\e[0;32m'
 red='\e[0;31m'
-silence=' >/dev/null 2>&1'
 
 #==================
 # Exit error codes
@@ -55,13 +57,22 @@ function ensure_root {
   fi
 }
 
+#========================
+# Command line arguments
+#========================
 function ensure_arguments {
   if [ "$arg1" == "--version" ];then
     echo "wi version $version"
     exit 0
+  elif [ "$arg1" == "scan" ];then
+    iface=$arg2
+    echo "[Scanning for networks with $iface]"
+    scan
+    check_scan
   elif [ $args -lt 2 ];then
     echo "$usage $usage_arguments"
     echo "    $usage_wireless_dhcp_connection"
+    echo "    $usage_wireless_scanning "
     exit $no_arguments
   else
     iface=$arg1
@@ -69,6 +80,9 @@ function ensure_arguments {
   fi  
 }
 
+#=================
+# Connection code
+#=================
 function put_interface_down {
   ip link set $iface down >/dev/null 2>&1
 }
@@ -80,6 +94,16 @@ function check_exit {
   fi  
 }
 
+function check_scan {
+  if [ $? != 0 ];then
+    echo -e "$red[Scan failed]"
+    exit 1
+  else
+    echo -e "$green[Scan complete]"
+    exit 0
+  fi
+}
+
 function put_interface_up {
   ip link set $iface up >/dev/null 2>&1
 }
@@ -89,7 +113,7 @@ function associate_with_essid {
 }
 
 function start_dhcp {
-  dhcpcd --quiet $iface >/dev/null 2>&1
+  dhcpcd -n -t10 -q $iface >/dev/null 2>&1
 }
 
 function kill_dhcpd {
@@ -108,11 +132,32 @@ function check_connection {
   fi
 }
 
+#==========
+# Scanning
+#==========
+function scan {
+  ip l s $iface up >/dev/null 2>&1
+  iwlist $iface scan | grep --color ESSID | tr -d [:blank:] 
+}
+
+#====================
+# Configuration file
+#====================
+function check_config {
+  if [ -f $wi_conf ]; then
+    . $wi_conf
+  else 
+    mkdir -p $wi_home
+    touch $wi_conf
+  fi
+}
+
 #===========
 # Execution
 #===========
 ensure_arguments
 ensure_root
+check_config
 echo -e "[Resetting environment]"
 put_interface_down
 check_exit $cannot_put_interface_down
@@ -130,3 +175,9 @@ echo -e "[Starting dhcp]"
 sleep 1
 start_dhcp
 check_connection
+
+#==========================================
+#//TODO Endless connectivity testing loop?
+#==========================================
+
+function 
