@@ -76,6 +76,8 @@ function ensure_arguments {
     echo "[Scanning for networks with $iface]"
     scan
     check_scan
+  elif [ "$arg1" == "test" ];then
+    test_connection
   elif [ $args -lt 2 ];then
     echo "$usage $usage_arguments"
     echo "    $usage_wireless_dhcp_connection"
@@ -120,7 +122,7 @@ function associate_with_essid {
 }
 
 function start_dhcp {
-  dhcpcd -n -t10 -q $iface >/dev/null 2>&1
+  dhcpcd -q $iface >/dev/null 2>&1
 }
 
 function kill_dhcpd {
@@ -134,7 +136,21 @@ function check_connection {
     echo -e "$green[Connected to $essid]"
     exit 0
   else
-    echo -e "$red[Connection failed]$reset exit: $no_connection"
+    echo -e "$red[Connection failed]"
+    exit $no_connection
+  fi
+}
+
+#======
+# Test
+#======
+function test_connection {
+  ping -c1 www.google.com >/dev/null 2>&1
+  if [ $? == 0 ];then
+    echo -e "$green[Connected]"
+    exit 0
+  else
+    echo -e "$red[No connection]"
     exit $no_connection
   fi
 }
