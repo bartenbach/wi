@@ -32,13 +32,9 @@ arg2=$2
 #==================
 # Script Variables
 #==================
-version='0.0.2-indev'
+version='0.0.3-indev'
 wi_home=$XDG_CONFIG_HOME/wi
 wi_conf=$wi_home/wi.conf
-usage='Usage:'
-usage_arguments='wi [connection-arguments] [--version] [-h,--help] [-d {interface},--disconnect {interface}]'
-usage_wireless_dhcp_connection='wireless dhcp connection: wi [interface] [essid]'
-usage_wireless_scanning='wireless network scanning: wi scan [interface]'
 iface=""
 essid=""
 green='\e[0;32m'
@@ -71,17 +67,27 @@ function ensure_arguments {
   if [ "$arg1" == "--version" ];then
     echo "wi version $version"
     exit 0
-  elif [ "$arg1" == "scan" ];then
-    iface=$arg2
-    echo "[Scanning for networks with $iface]"
-    scan
-    check_scan
-  elif [ "$arg1" == "test" ];then
+  elif [ "$arg1" == "--scan" ] || [ "$arg1" == "-s" ];then
+    if [ -z "$arg2" ];then
+      echo "Usage:            -s, --scan [interface]      Scan for wireless networks with [interface]"
+      exit $no_arguments
+    else
+      iface=$arg2
+      echo "[Scanning for networks with $iface]"
+      scan
+      check_scan
+      exit $?;
+    fi
+  elif [ "$arg1" == "--test" ] || [ "$arg1" == "-t" ];then
     test_connection
+    exit $?
   elif [ $args -lt 2 ];then
-    echo "$usage $usage_arguments"
-    echo "    $usage_wireless_dhcp_connection"
-    echo "    $usage_wireless_scanning "
+    echo "Usage: wi [arguments]" 
+    echo "                [interface] [essid]   Connect to the [essid] using [interface] via dhcp"
+    echo "                -t, --test            Check for a current internet connection "
+    echo "                -s, --scan [interface]      Scan for wireless networks with [interface]"
+    echo "                -h, --help            Show this menu"
+    echo "                --version             Print the current version of wi"
     exit $no_arguments
   else
     iface=$arg1
