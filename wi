@@ -1,5 +1,4 @@
 #!/bin/bash 
-#
 #  wi - a lightweight network utility for *nix
 #  Copyright (C) 2012 Blake Bartenbach
 #
@@ -23,16 +22,17 @@
 #set -x
 
 #===========
-# Arguments
+# Arguments - Does this look primitive and stupid?
 #===========
 args=$#
 arg1=$1
 arg2=$2
+arg3=$3
 
 #==================
 # Script Variables
 #==================
-version='0.0.3-indev'
+version='0.0.4-indev'
 wi_home=$XDG_CONFIG_HOME/wi
 wi_conf=$wi_home/wi.conf
 iface=""
@@ -60,14 +60,15 @@ function ensure_root {
   fi
 }
 
-#========================
-# Command line arguments
-#========================
-function ensure_arguments {
+#=================
+# Parse arguments
+#=================
+function parse_arguments {
   if [ "$arg1" == "--version" ];then
     echo "wi version $version"
     exit 0
-  elif [ "$arg1" == "--scan" ] || [ "$arg1" == "-s" ];then
+  elif [ "$arg1" == "-s" ] || [ "$arg1" == "--scan" ];then
+    ensure_root
     if [ -z "$arg2" ];then
       echo "Usage:            -s, --scan [interface]      Scan for wireless networks with [interface]"
       exit $no_arguments
@@ -78,20 +79,22 @@ function ensure_arguments {
       check_scan
       exit $?;
     fi
-  elif [ "$arg1" == "--test" ] || [ "$arg1" == "-t" ];then
+  elif [ "$arg1" == "-t" ] || [ "$arg1" == "--test" ];then
     test_connection
     exit $?
-  elif [ $args -lt 2 ];then
-    echo "Usage: wi [arguments]" 
-    echo "                [interface] [essid]   Connect to the [essid] using [interface] via dhcp"
-    echo "                -t, --test            Check for a current internet connection "
-    echo "                -s, --scan [interface]      Scan for wireless networks with [interface]"
-    echo "                -h, --help            Show this menu"
-    echo "                --version             Print the current version of wi"
-    exit $no_arguments
+  elif [ "$arg1" == "-c" ] || [ "$arg1" == "--connect" ];then
+    iface=$arg2
+    essid=$arg3
+    connect_dhcp
   else
-    iface=$arg1
-    essid=$arg2
+    echo "Usage: wi [arguments]" 
+    echo "  -c, --connect interface essid   Connect to essid using interface via a"
+    echo "                                  wireless dhcp connection "
+    echo "  -t, --test                      Check for a current internet connection "
+    echo "  -s, --scan interface            Scan for wireless networks with interface"
+    echo "  -h, --help                      Show this menu"
+    echo "  --version                       Print the current version of wi"
+    exit $no_arguments
   fi  
 }
 
@@ -170,7 +173,7 @@ function scan {
 }
 
 #====================
-# Configuration file
+# Configuration file //TODO unimplemented!
 #====================
 function check_config {
   if [ -f $wi_conf ]; then
@@ -181,30 +184,51 @@ function check_config {
   fi
 }
 
-#===========
-# Execution
-#===========
-ensure_arguments
-ensure_root
-check_config
-echo -e "[Resetting environment]"
-put_interface_down
-check_exit $cannot_put_interface_down
-kill_dhcpd
-sleep 1
-echo -e "[Associating with $essid]"
-associate_with_essid
-check_exit $cannot_associate_with_essid
-sleep 1
-echo -e "[Putting $iface up]"
-put_interface_up
-check_exit $cannot_put_interface_up
-sleep 1
-echo -e "[Starting dhcp]"
-sleep 1
-start_dhcp
-check_connection
+#------------------------
+# Smart ESSID validation
+#------------------------
+function validate_essid {
+  #//FIXME needs to be passed an interface and needs to set the interface up.  broken.
+  counter=0
+  for scanned_essid in `iwlist wlan0 scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
+    do
+      essid_array[$counter]=$scanned_essid
+      echo $essid_array[$counter]
+      let $counter++
+    done
+}
+
+#-----------------
+# Dhcp connection
+#-----------------
+function connect_dhcp {
+  ensure_root
+#//TODO broken.
+#  validate_essid
+  echo -e "[Resetting environment]"
+  put_interface_down
+  check_exit $cannot_put_interface_down
+  kill_dhcpd
+  sleep 1
+  echo -e "[Associating with $essid]"
+  associate_with_essid
+  check_exit $cannot_associate_with_essid
+  sleep 1
+  echo -e "[Putting $iface up]"
+  put_interface_up
+  check_exit $cannot_put_interface_up
+  sleep 2
+  echo -e "[Starting dhcp]"
+  sleep 1
+  start_dhcp
+  check_connection
+}
 
 #==========================================
 #//TODO Endless connectivity testing loop?
 #==========================================
+
+#=====
+# Run
+#=====
+parse_arguments
