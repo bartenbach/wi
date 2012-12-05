@@ -33,7 +33,7 @@ arg3="$3"
 #-----------
 # Variables
 #-----------
-version='0.0.4-indev'
+version='0.0.5-indev'
 wi_home="$XDG_CONFIG_HOME/wi"
 wi_conf="$wi_home/wi.conf"
 iface=""
@@ -47,9 +47,9 @@ red='\e[0;31m'
 not_root='10'
 no_arguments='20'
 no_connection='30'
-cannot_put_interface_down='40'
+cannot_set_interface_down='40'
 cannot_associate_with_essid='50'
-cannot_put_interface_up='60'
+cannot_set_interface_up='60'
 
 #-----------
 # Functions
@@ -86,11 +86,13 @@ function parse_arguments {
   elif [[ $arg1 == '-c' ]] || [[ $arg1 == '--connect' ]];then
     iface=$arg2
     essid=$arg3
-    connect_dhcp
+    connect_wireless_dhcp
   else
     echo "Usage: wi [arguments]" 
-    echo "  -c, --connect interface essid   Connect to essid using interface via a"
-    echo "                                  wireless dhcp connection "
+    echo "  -c, --connect interface essid   Connect to a wireless essid using interface"
+    echo "                                  via dhcp"
+    echo "  -w, --wired interface           Connect to a wired network using interface "
+    echo "                                  via dhcp "
     echo "  -t, --test                      Check for a current internet connection "
     echo "  -s, --scan interface            Scan for wireless networks with interface"
     echo "  -h, --help                      Show this menu"
@@ -99,31 +101,15 @@ function parse_arguments {
   fi  
 }
 
-#=================
-# Connection code
-#=================
-function put_interface_down {
+#---------------------
+# Interface functions
+#---------------------
+function set_interface_down {
   ip link set $iface down >/dev/null 2>&1
 }
 
-function check_exit {
-  if [ $? != 0 ];then
-    echo -e "$red[Connection failed]$reset exit: $1"
-    exit $1
-  fi  
-}
 
-function check_scan {
-  if [ $? != 0 ];then
-    echo -e "$red[Scan failed]"
-    exit 1
-  else
-    echo -e "$green[Scan complete]"
-    exit 0
-  fi
-}
-
-function put_interface_up {
+function set_interface_up {
   ip link set $iface up >/dev/null 2>&1
 }
 
@@ -140,20 +126,10 @@ function kill_dhcpd {
   rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
 }
 
-function check_connection {
-  ping -c1 www.google.com >/dev/null 2>&1
-  if [ $? == 0 ];then
-    echo -e "$green[Connected to $essid]"
-    exit 0
-  else
-    echo -e "$red[Connection failed]"
-    exit $no_connection
-  fi
-}
 
-#======
+#------
 # Test
-#======
+#------
 function test_connection {
   ping -c1 www.google.com >/dev/null 2>&1
   if [ $? == 0 ];then
@@ -165,17 +141,48 @@ function test_connection {
   fi
 }
 
-#==========
+#-------
+# Check
+#-------
+function check_connection {
+  ping -c1 www.google.com >/dev/null 2>&1
+  if [ $? == 0 ];then
+    echo -e "$green[Connected to $essid]"
+    exit 0
+  else
+    echo -e "$red[Connection failed]"
+    return $no_connection
+  fi
+}
+
+function check_exit {
+  if [ $? != 0 ];then
+    echo -e "$red[Connection failed]$reset exit: $1"
+    exit $1
+  fi  
+}
+
+#----------
 # Scanning
-#==========
+#----------
 function scan {
   ip l s $iface up >/dev/null 2>&1
   iwlist $iface scan | grep --color ESSID | tr -d [:blank:] 
 }
 
-#====================
+function check_scan {
+  if [ $? != 0 ];then
+    echo -e "$red[Scan failed]"
+    exit 1
+  else
+    echo -e "$green[Scan complete]"
+    exit 0
+  fi
+}
+
+#--------------------
 # Configuration file //TODO unimplemented!
-#====================
+#--------------------
 function check_config {
   if [ -f $wi_conf ]; then
     . $wi_conf
@@ -186,53 +193,79 @@ function check_config {
 }
 
 #------------------------
-# Smart ESSID validation
+# Smart ESSID validation //TODO Needs to verify interface is up, needs to detect if essid exists. 
 #------------------------
 function validate_essid {
-  #//FIXME needs to be passed an interface and needs to set the interface up.  broken.
   let counter=0
-  for scanned_essid in `iwlist wlan0 scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
+  for scanned_essid in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
       essid_array[$counter]=$scanned_essid
-      echo $essid_array[$counter]
-      (($counter+=1));
+      #echo $scanned_essid
+      ((counter+=1))
     done
 }
 
 #--------------------
-# Retry to get an IP
+# Retry to get an IP //TODO Needs to be tested.
 #--------------------
-
+function dhcp_persist {
+  let j=1;
+  let z=1;
+  echo "[Entering persistant mode]"
+  while(j < 5)
+    let temp=$z;
+    while(z > 0)
+      do
+        echo "."
+        ((z-=1))
+      done
+      z=temp
+    do
+      kill_dhcp
+      sleep 1
+      start_dhcp
+      ((j+=1))
+   done     
+}
 
 #-----------------
 # Dhcp connection
 #-----------------
-function connect_dhcp {
+function connect_wireless_dhcp {
   ensure_root
-#//TODO broken.
+#//TODO not fully implemented!!
   validate_essid
-  echo -e "[Resetting environment]"
-  put_interface_down
-  check_exit $cannot_put_interface_down
+  echo "[Resetting environment]"
+  set_interface_down
+  check_exit $cannot_set_interface_down
   kill_dhcpd
   sleep 1
-  echo -e "[Associating with $essid]"
+  echo "[Associating with $essid]"
   associate_with_essid
   check_exit $cannot_associate_with_essid
   sleep 1
-  echo -e "[Putting $iface up]"
-  put_interface_up
-  check_exit $cannot_put_interface_up
+  echo "[Putting $iface up]"
+  set_interface_up
+  check_exit $cannot_set_interface_up
   sleep 2
-  echo -e "[Starting dhcp]"
+  echo "[Starting dhcp]"
   sleep 1
   start_dhcp
   check_connection
+  dhcp_persist
 }
 
-#==========================================
-#//TODO Endless connectivity testing loop?
-#==========================================
+function connect_wired_dhcp {
+  echo "Unimplemented!  Code it yer self!"  
+}
+
+#---------------------------------
+#//TODO Connectivity testing loop
+#---------------------------------
+
+#--------------------------------
+# //TODO Verify interface exists
+#--------------------------------
 
 #=====
 # Run
