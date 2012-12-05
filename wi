@@ -1,4 +1,5 @@
 #!/bin/bash 
+#
 #  wi - a lightweight network utility for *nix
 #  Copyright (C) 2012 Blake Bartenbach
 #
@@ -16,60 +17,60 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-#============
-# Debug mode
-#============
+#-------
+# Debug
+#-------
 #set -x
 
-#===========
-# Arguments - Does this look primitive and stupid?
-#===========
-args=$#
-arg1=$1
-arg2=$2
-arg3=$3
+#-----------
+# Arguments
+#-----------
+args="$#"
+arg1="$1"
+arg2="$2"
+arg3="$3"
 
-#==================
-# Script Variables
-#==================
+#-----------
+# Variables
+#-----------
 version='0.0.4-indev'
-wi_home=$XDG_CONFIG_HOME/wi
-wi_conf=$wi_home/wi.conf
+wi_home="$XDG_CONFIG_HOME/wi"
+wi_conf="$wi_home/wi.conf"
 iface=""
 essid=""
 green='\e[0;32m'
 red='\e[0;31m'
 
-#==================
-# Exit error codes
-#==================
-not_root=10
-no_arguments=20
-no_connection=30
-cannot_put_interface_down=40
-cannot_associate_with_essid=50
-cannot_put_interface_up=60
+#------------
+# Exit codes
+#------------
+not_root='10'
+no_arguments='20'
+no_connection='30'
+cannot_put_interface_down='40'
+cannot_associate_with_essid='50'
+cannot_put_interface_up='60'
 
-#===========
+#-----------
 # Functions
-#===========
+#-----------
 function ensure_root {
-  if [ $EUID != 0 ];then
+  if [[ $EUID != 0 ]];then
     echo -e "${red}You must be root to manage network interfaces"
     exit $not_root
   fi
 }
 
-#=================
+#-----------------
 # Parse arguments
-#=================
+#-----------------
 function parse_arguments {
-  if [ "$arg1" == "--version" ];then
+  if [[ $arg1 == '--version' ]];then
     echo "wi version $version"
     exit 0
-  elif [ "$arg1" == "-s" ] || [ "$arg1" == "--scan" ];then
+  elif [[ $arg1 == '-s' ]] || [[ $arg1 == '--scan' ]];then
     ensure_root
-    if [ -z "$arg2" ];then
+    if [[ -z $arg2 ]];then
       echo "Usage:            -s, --scan [interface]      Scan for wireless networks with [interface]"
       exit $no_arguments
     else
@@ -79,10 +80,10 @@ function parse_arguments {
       check_scan
       exit $?;
     fi
-  elif [ "$arg1" == "-t" ] || [ "$arg1" == "--test" ];then
+  elif [[ $arg1 == '-t' ]] || [[ $arg1 == '--test' ]];then
     test_connection
     exit $?
-  elif [ "$arg1" == "-c" ] || [ "$arg1" == "--connect" ];then
+  elif [[ $arg1 == '-c' ]] || [[ $arg1 == '--connect' ]];then
     iface=$arg2
     essid=$arg3
     connect_dhcp
@@ -189,14 +190,19 @@ function check_config {
 #------------------------
 function validate_essid {
   #//FIXME needs to be passed an interface and needs to set the interface up.  broken.
-  counter=0
+  let counter=0
   for scanned_essid in `iwlist wlan0 scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
       essid_array[$counter]=$scanned_essid
       echo $essid_array[$counter]
-      let $counter++
+      (($counter+=1));
     done
 }
+
+#--------------------
+# Retry to get an IP
+#--------------------
+
 
 #-----------------
 # Dhcp connection
@@ -204,7 +210,7 @@ function validate_essid {
 function connect_dhcp {
   ensure_root
 #//TODO broken.
-#  validate_essid
+  validate_essid
   echo -e "[Resetting environment]"
   put_interface_down
   check_exit $cannot_put_interface_down
