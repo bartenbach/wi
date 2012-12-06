@@ -50,6 +50,7 @@ no_connection='30'
 cannot_set_interface_down='40'
 cannot_associate_with_essid='50'
 cannot_set_interface_up='60'
+network_not_found='70' #//TODO Will hidden networks incorrectly exit with this?
 
 #-----------
 # Functions
@@ -117,15 +118,22 @@ function associate_with_essid {
   iwconfig $iface essid $essid >/dev/null 2>&1
 }
 
-function start_dhcp {
-  dhcpcd -q $iface >/dev/null 2>&1
+function start_dhcpcd {
+  dhcpcd -K $iface >/dev/null 2>&1
 }
 
-function kill_dhcpd {
+function release_dhcpcd {
+  dhcpcd -k $iface >/dev/null 2>&1  
+}
+
+function kill_dhcpcd {
   pkill -9 dhcpcd >/dev/null 2>&1
   rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
 }
 
+function isUp {
+  return `ip link show up | grep $iface`
+}
 
 #------
 # Test
@@ -150,7 +158,6 @@ function check_connection {
     echo -e "$green[Connected to $essid]"
     exit 0
   else
-    echo -e "$red[Connection failed]"
     return $no_connection
   fi
 }
@@ -196,13 +203,17 @@ function check_config {
 # Smart ESSID validation //TODO Needs to verify interface is up, needs to detect if essid exists. 
 #------------------------
 function validate_essid {
-  let counter=0
+  if [[ ! isUp ]];then
+    set_interface_up
+  fi
   for scanned_essid in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
-      essid_array[$counter]=$scanned_essid
-      #echo $scanned_essid
-      ((counter+=1))
+      if [ $essid == $scanned_essid ];then
+        return 
+      fi
     done
+    echo -e "$red[Network \"$essid\" not found]"
+    exit $network_not_found
 }
 
 #--------------------
@@ -210,20 +221,12 @@ function validate_essid {
 #--------------------
 function dhcp_persist {
   let j=1;
-  let z=1;
-  echo "[Entering persistant mode]"
-  while(j < 5)
-    let temp=$z;
-    while(z > 0)
-      do
-        echo "."
-        ((z-=1))
-      done
-      z=temp
+  while [[ j < 5 ]]
+    echo "[Failed to get an IP - Retry: $j]"
     do
-      kill_dhcp
-      sleep 1
-      start_dhcp
+      release_dhcpcd
+      start_dhcpcd
+      check_connection
       ((j+=1))
    done     
 }
@@ -232,25 +235,19 @@ function dhcp_persist {
 # Dhcp connection
 #-----------------
 function connect_wireless_dhcp {
+  echo "[Checking for root privledges]"
   ensure_root
-#//TODO not fully implemented!!
+  echo "[Searching for $essid]"
   validate_essid
   echo "[Resetting environment]"
-  set_interface_down
-  check_exit $cannot_set_interface_down
-  kill_dhcpd
-  sleep 1
+  set_interface_down && check_exit $cannot_set_interface_down
+  release_dhcpcd
   echo "[Associating with $essid]"
-  associate_with_essid
-  check_exit $cannot_associate_with_essid
-  sleep 1
+  associate_with_essid && check_exit $cannot_associate_with_essid
   echo "[Putting $iface up]"
-  set_interface_up
-  check_exit $cannot_set_interface_up
-  sleep 2
+  set_interface_up && check_exit $cannot_set_interface_up
   echo "[Starting dhcp]"
-  sleep 1
-  start_dhcp
+  start_dhcpcd
   check_connection
   dhcp_persist
 }
