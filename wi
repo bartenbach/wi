@@ -17,11 +17,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-#-------
-# Debug
-#-------
-#set -x
-
 #-----------
 # Arguments
 #-----------
@@ -82,8 +77,7 @@ function parse_arguments {
       exit $?;
     fi
   elif [[ $arg1 == '-t' ]] || [[ $arg1 == '--test' ]];then
-    test_connection
-    exit $?
+    test_connection && exit $?
   elif [[ $arg1 == '-c' ]] || [[ $arg1 == '--connect' ]];then
     iface=$arg2
     essid=$arg3
@@ -132,7 +126,7 @@ function kill_dhcpcd {
 }
 
 function isUp {
-  return `ip link show up | grep $iface`
+  ip link show up | grep $iface
 }
 
 #------
@@ -163,10 +157,7 @@ function check_connection {
 }
 
 function check_exit {
-  if [ $? != 0 ];then
-    echo -e "$red[Connection failed]$reset exit: $1"
-    exit $1
-  fi  
+  [[ $? != 0 ]] && echo -e "$red[Connection failed]$reset exit: $1" && exit $1
 }
 
 #----------
@@ -205,9 +196,8 @@ function check_config {
 # ESSID validation
 #------------------
 function validate_essid {
-  if [[ ! isUp ]];then
-    set_interface_up
-  fi
+  isUp
+  [[ $? != "0" ]] && set_interface_up
   for scanned_essid in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
       if [ $essid == $scanned_essid ];then
@@ -240,7 +230,7 @@ function dhcp_persist {
 function connect_wireless_dhcp {
   ensure_root
   check_config
-  echo "[Finding networks within range]"
+  echo "[Scanning]"
   validate_essid
   echo "[Resetting environment]"
   set_interface_down && check_exit $cannot_set_interface_down
