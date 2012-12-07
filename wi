@@ -50,7 +50,7 @@ no_connection='30'
 cannot_set_interface_down='40'
 cannot_associate_with_essid='50'
 cannot_set_interface_up='60'
-network_not_found='70' #//TODO Will hidden networks incorrectly exit with this?
+network_not_found='70'
 
 #-----------
 # Functions
@@ -174,7 +174,8 @@ function check_exit {
 #----------
 function scan {
   ip l s $iface up >/dev/null 2>&1
-  iwlist $iface scan | grep --color ESSID | tr -d [:blank:] 
+  #iwlist $iface scan | grep --color ESSID | tr -d [:blank:] 
+  iwlist $iface scan | grep --color 'ESSID:"[A-Za-z0-9.]*"$'
 }
 
 function check_scan {
@@ -188,7 +189,7 @@ function check_scan {
 }
 
 #--------------------
-# Configuration file //TODO unimplemented!
+# Configuration file //TODO unimplemented
 #--------------------
 function check_config {
   if [ -f $wi_conf ]; then
@@ -199,9 +200,9 @@ function check_config {
   fi
 }
 
-#------------------------
-# Smart ESSID validation //TODO Needs to verify interface is up, needs to detect if essid exists. 
-#------------------------
+#------------------
+# ESSID validation
+#------------------
 function validate_essid {
   if [[ ! isUp ]];then
     set_interface_up
@@ -214,6 +215,7 @@ function validate_essid {
     done
     echo -e "$red[Network \"$essid\" not found]"
     exit $network_not_found
+    #//TODO Will hidden networks incorrectly exit with this?
 }
 
 #--------------------
@@ -237,15 +239,17 @@ function dhcp_persist {
 function connect_wireless_dhcp {
   echo "[Checking for root privledges]"
   ensure_root
-  echo "[Searching for $essid]"
+  echo "[Finding networks within range]"
   validate_essid
   echo "[Resetting environment]"
   set_interface_down && check_exit $cannot_set_interface_down
   release_dhcpcd
   echo "[Associating with $essid]"
   associate_with_essid && check_exit $cannot_associate_with_essid
+  sleep 1
   echo "[Putting $iface up]"
   set_interface_up && check_exit $cannot_set_interface_up
+  sleep 2
   echo "[Starting dhcp]"
   start_dhcpcd
   check_connection
