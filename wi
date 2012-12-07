@@ -35,6 +35,7 @@ iface=""
 essid=""
 green='\e[0;32m'
 red='\e[0;31m'
+silence='>/dev/null 2>&1'
 
 #------------
 # Exit codes
@@ -100,12 +101,12 @@ function parse_arguments {
 # Interface functions
 #---------------------
 function set_interface_down {
-  ip link set $iface down >/dev/null 2>&1
+  ip l s $iface down >/dev/null 2>&1
 }
 
 
 function set_interface_up {
-  ip link set $iface up >/dev/null 2>&1
+  ip l s $iface up >/dev/null 2>&1
 }
 
 function associate_with_essid {
@@ -113,7 +114,7 @@ function associate_with_essid {
 }
 
 function start_dhcpcd {
-  dhcpcd -K $iface >/dev/null 2>&1
+  dhcpcd -K $iface $silence
 }
 
 function release_dhcpcd {
@@ -126,7 +127,8 @@ function kill_dhcpcd {
 }
 
 function isUp {
-  ip link show up | grep $iface
+  ip link show up | grep $iface >/dev/null 2>&1
+  [[ $? != "0" ]] && set_interface_up
 }
 
 #------
@@ -164,7 +166,7 @@ function check_exit {
 # Scanning
 #----------
 function scan {
-  ip l s $iface up >/dev/null 2>&1
+  isUp
   #iwlist $iface scan | grep --color ESSID | tr -d [:blank:] 
   iwlist $iface scan | grep --color 'ESSID:"[A-Za-z0-9.]*"$'
 }
@@ -197,7 +199,6 @@ function check_config {
 #------------------
 function validate_essid {
   isUp
-  [[ $? != "0" ]] && set_interface_up
   for scanned_essid in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
       if [ $essid == $scanned_essid ];then
@@ -230,19 +231,21 @@ function dhcp_persist {
 function connect_wireless_dhcp {
   ensure_root
   check_config
-  echo "[Scanning]"
+  echo "[Connecting to $essid]"
+  #echo -ne "[Scanning]\r"
+  show_progress 20
   validate_essid
-  echo "[Resetting environment]"
+  #echo -ne "[Resetting environment]\r"
   set_interface_down && check_exit $cannot_set_interface_down
   release_dhcpcd
   sleep 1
-  echo "[Associating with $essid]"
+  #echo -ne "[Associating with $essid]\r"
   associate_with_essid && check_exit $cannot_associate_with_essid
   sleep 1
-  echo "[Putting $iface up]"
+  #echo -ne "[Putting $iface up]\r"
   set_interface_up && check_exit $cannot_set_interface_up
   sleep 2
-  echo "[Starting dhcp]"
+  #echo -ne "[Starting dhcp]\r"
   start_dhcpcd
   check_connection
   dhcp_persist
@@ -250,6 +253,22 @@ function connect_wireless_dhcp {
 
 function connect_wired_dhcp {
   echo "Unimplemented!  Code it yer self!"  
+}
+
+#--------------
+# Progress bar
+#--------------
+show_progress() {
+  echo -ne "[----------------------------------------]\r"
+  for i in {1..$1}
+    do
+      for x in i
+        do
+          $pounds + "#"
+        done
+      #echo -ne "[#-----------------------------------]\r"
+      echo -ne "[$pounds]\r"
+    done  
 }
 
 #---------------------------------
