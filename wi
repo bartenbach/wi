@@ -193,7 +193,6 @@ function check_scan {
 #--------------------
 function check_config {
   if [ -f $wi_conf ]; then
-    echo "[Parsing configuration file]"
     . $wi_conf
   else 
     echo "[Created new configuration file at $wi_conf]"
@@ -239,7 +238,6 @@ function dhcp_persist {
 # Dhcp connection
 #-----------------
 function connect_wireless_dhcp {
-  echo "[Checking for root privledges]"
   ensure_root
   check_config
   echo "[Finding networks within range]"
@@ -247,6 +245,7 @@ function connect_wireless_dhcp {
   echo "[Resetting environment]"
   set_interface_down && check_exit $cannot_set_interface_down
   release_dhcpcd
+  sleep 1
   echo "[Associating with $essid]"
   associate_with_essid && check_exit $cannot_associate_with_essid
   sleep 1
