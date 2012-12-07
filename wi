@@ -193,8 +193,10 @@ function check_scan {
 #--------------------
 function check_config {
   if [ -f $wi_conf ]; then
+    echo "[Parsing configuration file]"
     . $wi_conf
   else 
+    echo "[Created new configuration file at $wi_conf]"
     mkdir -p $wi_home
     touch $wi_conf
   fi
@@ -239,6 +241,7 @@ function dhcp_persist {
 function connect_wireless_dhcp {
   echo "[Checking for root privledges]"
   ensure_root
+  check_config
   echo "[Finding networks within range]"
   validate_essid
   echo "[Resetting environment]"
