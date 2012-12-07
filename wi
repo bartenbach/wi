@@ -136,7 +136,7 @@ function isUp {
 #------
 function test_connection {
   ping -c1 www.google.com >/dev/null 2>&1
-  if [ $? == 0 ];then
+  if [[ $? == 0 ]];then
     echo -e "$green[Connected]"
     exit 0
   else
@@ -150,7 +150,7 @@ function test_connection {
 #-------
 function check_connection {
   ping -c1 www.google.com >/dev/null 2>&1
-  if [ $? == 0 ];then
+  if [[ $? == 0 ]];then
     echo -e "$green[Connected to $essid]"
     exit 0
   else
@@ -172,7 +172,7 @@ function scan {
 }
 
 function check_scan {
-  if [ $? != 0 ];then
+  if [[ $? != 0 ]];then
     echo -e "$red[Scan failed]"
     exit 1
   else
@@ -185,7 +185,7 @@ function check_scan {
 # Configuration file //TODO unimplemented
 #--------------------
 function check_config {
-  if [ -f $wi_conf ]; then
+  if [[ -f $wi_conf ]]; then
     . $wi_conf
   else 
     echo "[Created new configuration file at $wi_conf]"
@@ -201,7 +201,7 @@ function validate_essid {
   isUp
   for scanned_essid in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [ESSID:] | tr -d [\"]`
     do
-      if [ $essid == $scanned_essid ];then
+      if [[ $essid == $scanned_essid ]];then
         return 
       fi
     done
@@ -222,65 +222,77 @@ function dhcp_persist {
       start_dhcpcd
       check_connection
       ((j+=1))
-   done     
+   done 
 }
 
-#-----------------
-# Dhcp connection
-#-----------------
-function connect_wireless_dhcp {
+#------------------------------
+# Generic connection functions
+#------------------------------
+function pre_connect {
   ensure_root
   check_config
-  echo "[Connecting to $essid]"
-  #echo -ne "[Scanning]\r"
-  show_progress 20
+}
+
+function reset_environment {
+  set_interface_down && check_exit $cannot_set_interface_down 
+  release_dhcpcd #//TODO need a check_exit here...
+  #//TODO associate with a ghost network??
+}
+
+function associate {
+  associate_with_essid && check_exit $cannot_associate_with_essid 
+}
+
+function put_interface_up {
+  isUp && check_exit $cannot_set_interface_up  
+}
+
+#--------------------------
+# Wireless dhcp connection
+#--------------------------
+function connect_wireless_dhcp {
+  pre_connect
+  echo "[Scanning]"
   validate_essid
-  #echo -ne "[Resetting environment]\r"
-  set_interface_down && check_exit $cannot_set_interface_down
-  release_dhcpcd
-  sleep 1
-  #echo -ne "[Associating with $essid]\r"
-  associate_with_essid && check_exit $cannot_associate_with_essid
-  sleep 1
-  #echo -ne "[Putting $iface up]\r"
-  set_interface_up && check_exit $cannot_set_interface_up
-  sleep 2
-  #echo -ne "[Starting dhcp]\r"
+  echo "[Resetting environment]" 
+  reset_environment && sleep 1
+  echo "[Associating with $essid]"
+  associate && sleep 1
+  echo "[Putting $iface up]" 
+  put_interface_up && sleep 1
+  echo "[Starting dhcp]"
   start_dhcpcd
   check_connection
   dhcp_persist
 }
 
+#------------------------
+# Wired dhcp connecction
+#------------------------
 function connect_wired_dhcp {
   echo "Unimplemented!  Code it yer self!"  
 }
 
-#--------------
-# Progress bar
-#--------------
-show_progress() {
-  echo -ne "[----------------------------------------]\r"
-  for i in {1..$1}
-    do
-      for x in i
-        do
-          $pounds + "#"
-        done
-      #echo -ne "[#-----------------------------------]\r"
-      echo -ne "[$pounds]\r"
-    done  
+#-------------------------
+# Wireless WPA connection
+#-------------------------
+function connect_wireless_wpa {
+  echo "Well...this is going to suck."
 }
+
+#---------------------
+#//TODO Progress bar?
+#---------------------
 
 #---------------------------------
 #//TODO Connectivity testing loop
 #---------------------------------
 
 #--------------------------------
-# //TODO Verify interface exists
+#//TODO Verify interface exists
 #--------------------------------
 
-#=====
+#-----
 # Run
-#=====
+#-----
 parse_arguments
-modification
