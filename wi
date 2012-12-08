@@ -35,7 +35,7 @@ iface=""
 essid=""
 green='\e[0;32m'
 red='\e[0;31m'
-silence='>/dev/null 2>&1'
+silence=">/dev/null 2>&1"
 
 #------------
 # Exit codes
