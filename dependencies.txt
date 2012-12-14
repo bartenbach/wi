@@ -1,0 +1,6 @@
+bash
+nmap
+iproute2
+iwconfig
+wireless-tools
+dhcpcd
