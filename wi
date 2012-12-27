@@ -34,8 +34,8 @@ wi_conf="$wi_home/wi.conf"
 iface=""
 essid=""
 green='\e[0;32m'
+let retries=5
 red='\e[0;31m'
-silence=">/dev/null 2>&1"
 
 #------------
 # Exit codes
@@ -132,7 +132,7 @@ function isUp {
 }
 
 function ping_check {
-  nmap -sn --max-retries=1 --host-timeout=2 208.67.222.222 >/dev/null 2>&1
+  ping -c1 -W1 http://www.google.com >/dev/null 2>&1
 }
 
 #------
@@ -154,7 +154,7 @@ function test_connection {
 #-------
 function check_connection {
   ping_check
-  if [[ $? == 0 ]];then
+  if [[ $?==0 ]];then
     echo -e "$green[Connected to $essid]"
     exit 0
   else
@@ -206,29 +206,21 @@ function validate_essid {
       fi
     done
     echo -e "$red[Network \"$essid\" not found]"
-    exit $network_not_found
     #//TODO Will hidden networks incorrectly exit with this?
+    #FIXME Yup, doesn't work :(
 }
 
 #--------------------
 # Retry to get an IP //TODO Needs to be tested.
 #--------------------
 function dhcp_persist {
-  let j=1;
-  while [[ j < 5 ]]
+  let j=1
+  while [[ j<=5 ]]
+    do
     echo "[Failed to lease an IP]"
     echo "[Retrying ($j/5)]"
-    do
-      kill_dhcpcd
-      reset_environment
-      sleep 1
-      associate
-      sleep 1
-      put_interface_up
-      sleep 1
-      start_dhcpcd
-      check_connection
-      ((j+=1))
+    connect_wirelesss_dhcp  
+    ((j+=1))
    done 
 }
 
