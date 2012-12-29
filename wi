@@ -33,9 +33,9 @@ wi_home="$XDG_CONFIG_HOME/wi"
 wi_conf="$wi_home/wi.conf"
 iface=""
 essid=""
-green='\e[0;32m'
-let retries=5
-red='\e[0;31m'
+green='\e[0;32m'  # Expected behavior
+red='\e[0;31m'    # Error or problem
+yellow='\e[0;93m' # Warning/potential issue
 
 #------------
 # Exit codes
@@ -205,9 +205,8 @@ function validate_essid {
         return 
       fi
     done
-    echo -e "$red[Network \"$essid\" not found]"
-    #//TODO Will hidden networks incorrectly exit with this?
-    #FIXME Yup, doesn't work :(
+  echo -e "$yellow[Network \"$essid\" not found - continuing assuming it's hidden]"
+  #//TODO test this
 }
 
 #--------------------
@@ -215,11 +214,11 @@ function validate_essid {
 #--------------------
 function dhcp_persist {
   let j=1
-  while [[ j<=5 ]]
+  while [[ "$j" -lt "5" ]] && [[ "$?" -ne "0" ]]
     do
     echo "[Failed to lease an IP]"
     echo "[Retrying ($j/5)]"
-    connect_wirelesss_dhcp  
+    retry_wireless_dhcp
     ((j+=1))
    done 
 }
@@ -246,6 +245,10 @@ function put_interface_up {
   isUp && check_exit $cannot_set_interface_up  
 }
 
+function retry_if_needed {
+  [[ $? -eq "0" ]] && dhcp_persist    
+}
+
 #--------------------------
 # Wireless dhcp connection
 #--------------------------
@@ -265,7 +268,19 @@ function connect_wireless_dhcp {
   echo "[Starting dhcp]"
   start_dhcpcd
   check_connection
-  dhcp_persist
+  retry_if_needed
+}
+
+function retry_wireless_dhcp {
+  validate_essid
+  reset_environment
+  sleep 1
+  associate
+  sleep 1
+  put_interface_up
+  sleep 1
+  start_dhcpcd
+  check_connection
 }
 
 #------------------------
