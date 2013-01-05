@@ -135,7 +135,7 @@ function isUp {
 }
 
 function ping_check {
-  ping -c1 -W1 http://www.google.com >/dev/null 2>&1
+  ping -c1 -W1 google.com >/dev/null 2>&1
 }
 
 #------
@@ -177,7 +177,6 @@ function check_scan {
 #--------------------
 function check_config {
   if [[ -f $wi_conf ]]; then
-    echo feces
     . $wi_conf && return
   fi 
   echo "[Created new configuration file at $wi_conf]"
