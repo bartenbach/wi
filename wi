@@ -274,8 +274,8 @@ function retry_if_needed {
 
 function generic_wireless {
   pre_connect
-  echo "[Scanning]" && validate_essid
   validate_interface
+  echo "[Scanning]" && validate_essid
   echo "[Resetting environment]" && reset_environment
   sleep 1
   echo "[Associating with $essid]" && associate
