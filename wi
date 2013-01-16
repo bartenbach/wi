@@ -34,19 +34,19 @@ yellow='\e[0;93m'
 #------------
 # Exit codes
 #------------
-not_root='10'
-interface_not_found='15'
-no_arguments='20'
-missing_arguments='25'
-no_connection='30'
-cannot_set_interface_down='40'
-cannot_associate_with_essid='50'
-cannot_set_interface_up='60'
-cannot_start_dhcpcd='65'
-network_not_found='70'
-dhcpcd_wont_die='80'
-cannot_set_wep_key='90'
-iwlist_scan_failed='100'
+not_root='10' # User needed to be root and was not
+interface_not_found='15' # The interface supplied does not exist
+no_arguments='20' # No arguments were supplied
+missing_arguments='25' # An argument is missing
+no_connection='30' # We exited without obtaining a connection
+no_enc='35' # Encryption key was not supplied and is required
+cannot_set_interface_down='40' # Shell returned non-zero on set down attempt
+cannot_associate_with_essid='50' # Problem associating with the ESSID
+cannot_set_interface_up='60' # Shell returned non-zero on set up attempt
+cannot_start_dhcpcd='65' # Shell returned non-zero starting dhcpcd
+network_not_found='70' # Failed to find ESSID via iwlist scan
+cannot_set_wep_key='90' # Unable to set wep key
+iwlist_scan_failed='100' # scanning with iwlist failed
 
 #-----------
 # Functions
@@ -76,6 +76,15 @@ function echo_usage {
 #-----------------
 # Parse arguments
 #-----------------
+parse_arguments_case() {
+  while :
+    do
+      case $1 in
+      
+      esac
+    done  
+}
+
 parse_arguments() {
   if [[ $1 == '--version' ]];then
     echo "v$version" && exit 0
@@ -92,6 +101,9 @@ parse_arguments() {
   elif [[ $1 == '-e' ]] || [[ $1 == '--wep' ]];then
     [[ -z $2 ]] || [[ -z $3 ]] || [[ -z $4 ]] && exit_noargs $1
     connect_wireless_WEP_dhcp $* && exit 0 
+  elif [[ $1 == '-a' ]] || [[ $1 == '--wpa' ]];then
+    [[ -z $2 ]] || [[ -z $3 ]] && exit_noargs $1
+    connect_wireless_wpa_dhcp $* && exit 0 
   elif [[ $1 == '-w' ]] || [[ $1 == '--wired' ]];then
     [[ -z $2 ]] && exit_noargs $1
     connect_wired_dhcp $* && exit 0
@@ -114,32 +126,35 @@ assign_arguments() {
 # Interface functions
 #---------------------
 function set_interface_down {
-  ip l s $iface down >/dev/null 2>&1 && check_exit $cannot_set_interface_down
+  ip l s $iface down &>/dev/null && check_exit $cannot_set_interface_down
 }
 
 function set_interface_up {
-  ip l s $iface up >/dev/null 2>&1 && check_exit $cannot_set_interface_up
+  ip l s $iface up &>/dev/null && check_exit $cannot_set_interface_up
 }
 
 function associate_with_essid {
-  iwconfig $iface essid $essid >/dev/null 2>&1 && check_exit $cannot_associate_with_essid
+  iwconfig $iface essid $essid &>/dev/null && check_exit $cannot_associate_with_essid
 }
 
 function start_dhcpcd {
-  dhcpcd -K -A $iface >/dev/null 2>&1 && check_exit $cannot_start_dhcpcd
+  dhcpcd -K -A $iface &>/dev/null && check_exit $cannot_start_dhcpcd
 }
 
 function kill_dhcpcd {
-  pkill -9 dhcpcd >/dev/null 2>&1 && rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
+  pkill -9 dhcpcd &>/dev/null && rm /run/dhcpcd-$iface.pid &>/dev/null
 }
 
 function isUp {
-  `ip link show up | grep $iface >/dev/null 2>&1`
-  [[ $? != 0 ]] && set_interface_up && sleep 1
+  `ip link show up | grep $iface &>/dev/null`
+  if [[ $? != 0 ]];then
+    set_interface_up
+    sleep 1
+  fi
 }
 
 function ping_check {
-  ping -c1 -W1 google.com >/dev/null 2>&1
+  ping -c1 -W1 google.com &>/dev/null
 }
 
 #------
@@ -208,13 +223,15 @@ function validate_essid {
     do
       [[ "ESSID:$essid" == "$scanned_essid" ]] && return
     done
-  echo "[Network \"$essid\" not found]" && exit $network_not_found
+  echo -e "$red[Network \"${yellow}$essid${red}\" not found]$reset"
+  exit $network_not_found
 }
 
 function validate_interface {
   ip link show dev $iface &>/dev/null
   [[ $? -eq 0 ]] && return
-  echo "[Network interface \"$iface\" not detected]" && exit $interface_not_found 
+  echo -e "$red[Network interface \"${yellow}$iface$red\" not detected]$reset"
+  exit $interface_not_found
 }
 #--------
 # Checks
@@ -222,7 +239,7 @@ function validate_interface {
 function check_connection {
   ping_check
   if [[ $? == 0 ]];then
-    echo "[Connected to $essid]" && exit 0
+    echo -e "$green[Connected to $essid]$reset" && exit 0
   else
     return $no_connection
   fi
@@ -239,7 +256,7 @@ check_exit() {
 #--------------------
 function dhcp_persist {
   let j=1
-  while [[ "$j" -lt "5" ]] && [[ "$?" -ne "0" ]]
+  while (( j < 5 )) && (( $? > 0 ))
     do
     echo "[Failed to lease an IP]"
     echo "[Retrying ($j/5)]"
@@ -257,7 +274,7 @@ function pre_connect {
 
 function reset_environment {
   set_interface_down && check_exit $cannot_set_interface_down 
-  kill_dhcpcd && check_exit $dhcpcd_wont_die
+  kill_dhcpcd
 }
 
 function associate {
@@ -296,17 +313,14 @@ connect_unsecured_wireless_dhcp() {
 
 function retry_wireless_dhcp {
   validate_essid
-  reset_environment && sleep 1
-  associate && sleep 1
-  put_interface_up && sleep 1
-  start_dhcpcd && check_connection
-}
-
-#-------------------------
-# Wireless WPA connection
-#-------------------------
-function connect_wireless_WPA_dhcp {
-  generic_wireless  
+  reset_environment
+  sleep 1
+  associate
+  sleep 1
+  put_interface_up
+  sleep 1
+  start_dhcpcd
+  check_connection
 }
 
 #-------------------------
@@ -319,12 +333,46 @@ connect_wireless_WEP_dhcp() {
   sleep 1
   echo "[Putting $iface up]" && put_interface_up
   sleep 1
-  echo "[Starting dhcp]" && start_dhcpcd
+  echo "$green[Acquiring an IP address]$reset" && start_dhcpcd
   test_connection
 }
 
 function set_wep_encryption {
-  iwconfig $iface key $wep >/dev/null 2>&1 && check_exit $cannot_set_wep_key
+  iwconfig $iface key $enc >/dev/null 2>&1 && check_exit $cannot_set_wep_key
+}
+
+#-------------------------
+# Wireless WPA connection
+#-------------------------
+connect_wireless_wpa_dhcp() {
+  assign_arguments $*
+  generic_wireless
+  set_wpa_key
+  start_wpa_supplicant
+  sleep 1
+  put_interface_up
+  sleep 1
+  echo -e "$green[Acquiring an IP address]$reset"
+  start_dhcpcd
+  check_connection
+  retry_if_needed
+}
+
+set_wpa_key() {
+  cat /etc/wpa_supplicant.conf | grep $essid &>/dev/null
+  if [[ $? != 0 ]];then
+    if [[ -z $enc ]];then
+      echo -e "$yellow[Encryption key for $essid not found]$reset"
+      echo -e "$yellow[Please enter the encryption key for $essid]$reset"
+      wpa_passphrase $essid >> /etc/wpa_supplicant.conf
+    elif [[ -n $enc ]];then
+      wpa_passphrase $essid $enc >> /etc/wpa_supplicant.conf
+    fi
+  fi
+}
+
+start_wpa_supplicant() {
+  wpa_supplicant -B -c/etc/wpa_supplicant.conf -i$iface
 }
 
 #------------------------
@@ -338,16 +386,9 @@ connect_wired_dhcp() {
   sleep 1
   echo "[Putting $iface up]" && put_interface_up
   sleep 1
-  echo "[Acquiring a IP]" && start_dhcpcd
+  echo "[Acquiring an IP address]" && start_dhcpcd
   sleep 1
   test_connection
-}
-
-#-------------------------
-# Wireless WPA connection
-#-------------------------
-function connect_wireless_wpa_dhcp {
-  echo "feces"
 }
 
 #---------------------
