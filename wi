@@ -21,7 +21,7 @@
 # Variables
 #-----------
 version='0.0.7-indev'
-wi_home="$XDG_CONFIG_HOME/wi"
+wi_home="/etc/wi"
 wi_conf="$wi_home/wi.conf"
 iface=''
 essid=''
@@ -163,7 +163,7 @@ ping_check() {
 # Test
 #------
 test_connection() {
-  check_config
+  pre_connect
   ping_check
   if [[ $? -eq 0 ]];then
     echo -e "$green[Connected]$reset"
@@ -213,8 +213,10 @@ write_default_config() {
   write "# wi.conf - wi configuration file"
   write "#"
   write ""
-  write "# use color in terminal messages? true/false"
+  write "# output color? true/false"
   write "color=false"
+  write ""
+  write "# vim : set ft=sh ts=2 sw=2 et:"
 }
 
 write() {
