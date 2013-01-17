@@ -52,7 +52,7 @@ iwlist_scan_failed='100'
 # Functions
 #-----------
 function ensure_root {
-  if [[ $EUID != 0 ]];then
+  if [[ $EUID -ne 0 ]];then
     echo "You must be root to manage network interfaces" && exit $not_root
   fi
 }
@@ -114,32 +114,35 @@ assign_arguments() {
 # Interface functions
 #---------------------
 function set_interface_down {
-  ip l s $iface down >/dev/null 2>&1 && check_exit $cannot_set_interface_down
+  ip l s $iface down &>/dev/null && check_exit $cannot_set_interface_down
 }
 
 function set_interface_up {
-  ip l s $iface up >/dev/null 2>&1 && check_exit $cannot_set_interface_up
+  ip l s $iface up &>/dev/null && check_exit $cannot_set_interface_up
 }
 
 function associate_with_essid {
-  iwconfig $iface essid $essid >/dev/null 2>&1 && check_exit $cannot_associate_with_essid
+  iwconfig $iface essid $essid &>/dev/null && check_exit $cannot_associate_with_essid
 }
 
 function start_dhcpcd {
-  dhcpcd -K -A $iface >/dev/null 2>&1 && check_exit $cannot_start_dhcpcd
+  dhcpcd -K -A $iface &>/dev/null && check_exit $cannot_start_dhcpcd
 }
 
 function kill_dhcpcd {
-  pkill -9 dhcpcd >/dev/null 2>&1 && rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
+  pkill -9 dhcpcd &>/dev/null && rm /run/dhcpcd-$iface.pid >/dev/null 2>&1  
 }
 
 function isUp {
-  `ip link show up | grep $iface >/dev/null 2>&1`
-  [[ $? != 0 ]] && set_interface_up && sleep 1
+  `ip link show up | grep $iface &>/dev/null`
+  if [[ $? -ne 0 ]];then
+    set_interface_up
+    sleep 1
+  fi
 }
 
 function ping_check {
-  ping -c1 -W1 google.com >/dev/null 2>&1
+  ping -c1 -W1 google.com &>/dev/null
 }
 
 #------
@@ -147,7 +150,7 @@ function ping_check {
 #------
 function test_connection {
   ping_check
-  if [[ $? == 0 ]];then
+  if [[ $? -ne 0 ]];then
     echo "[Connected]"
   else
     echo "[No connection]"
@@ -170,7 +173,7 @@ scan() {
 }
 
 function check_scan {
-  if [[ $? == 0 ]];then
+  if [[ $? -ne 0 ]];then
     echo "[Scan complete]" && exit 0
   fi
   echo "[Scan failed]" && exit $iwlist_scan_failed 
@@ -180,7 +183,7 @@ function check_scan {
 # Configuration file
 #--------------------
 function check_config {
-  if [[ -f $wi_conf ]]; then
+  if [[ -r $wi_conf ]]; then
     . $wi_conf && return
   fi 
   echo "[Created new configuration file at $wi_conf]"
@@ -221,7 +224,7 @@ function validate_interface {
 #--------
 function check_connection {
   ping_check
-  if [[ $? == 0 ]];then
+  if [[ $? -eq 0 ]];then
     echo "[Connected to $essid]" && exit 0
   else
     return $no_connection
@@ -229,7 +232,7 @@ function check_connection {
 }
 
 check_exit() {
-  if [[ $? != 0 ]];then
+  if [[ $? -ne 0 ]];then
     echo "[Error] exit: $1" && exit $1
   fi
 }
@@ -239,7 +242,7 @@ check_exit() {
 #--------------------
 function dhcp_persist {
   let j=1
-  while [[ "$j" -lt "5" ]] && [[ "$?" -ne "0" ]]
+  while [[ $j -lt 5 ]] && [[ $? -ne 0 ]]
     do
     echo "[Failed to lease an IP]"
     echo "[Retrying ($j/5)]"
@@ -269,7 +272,7 @@ function put_interface_up {
 }
 
 function retry_if_needed {
-  [[ $? -ne "0" ]] && dhcp_persist    
+  [[ $? -ne 0 ]] && dhcp_persist    
 }
 
 function generic_wireless {
@@ -324,7 +327,7 @@ connect_wireless_WEP_dhcp() {
 }
 
 function set_wep_encryption {
-  iwconfig $iface key $wep >/dev/null 2>&1 && check_exit $cannot_set_wep_key
+  iwconfig $iface key $wep &>/dev/null && check_exit $cannot_set_wep_key
 }
 
 #------------------------
@@ -347,7 +350,7 @@ connect_wired_dhcp() {
 # Wireless WPA connection
 #-------------------------
 function connect_wireless_wpa_dhcp {
-  echo "feces"
+  echo "Not currently implemented"
 }
 
 #---------------------
