@@ -20,17 +20,17 @@
 #-----------
 # Variables
 #-----------
-version='0.0.6-indev'
+version='0.0.7-indev'
 wi_home="/etc/wi"
 wi_conf="$wi_home/wi.conf"
 iface=''
 essid=''
 enc=''
 color=''
-green='\e[0;92m'
-red='\e[0;91m'
-yellow='\e[0;93m'
-reset='\e[0m'
+green=''
+red=''
+yellow=''
+reset=''
 
 #------------
 # Exit codes
@@ -66,6 +66,14 @@ function echo_usage {
   echo -e "  -s, --scan interface            Scan for wireless networks with interface"
   echo -e "  -h, --help                      Show this menu"
   echo -e "  --version                       Print the current version of wi"
+
+}
+
+function init_color {
+  green='\e[0;32m'
+  red='\e[0;31m'
+  yellow='\e[0;93m'
+  reset='\e[0m'  
 }
 
 #-----------------
@@ -108,7 +116,7 @@ parse_arguments() {
 }
 
 exit_noargs() {
-  echo -e "Missing argument for $1 (See wi -h,--help)" && exit $missing_arguments
+  echo -e "$yellow[Missing argument for $1 (See wi -h,--help)]$reset" && exit $missing_arguments
 }
 
 assign_arguments() {
@@ -163,11 +171,12 @@ ping_check() {
 # Test
 #------
 test_connection() {
+  pre_connect
   ping_check
   if [[ $? -eq 0 ]];then
-    echo -e "$green[Connected]"
+    echo -e "$green[Connected]$reset"
   else
-    echo -e "$red[No connection]"
+    echo -e "$yellow[No connection]$reset"
   fi
 }
 
@@ -199,19 +208,25 @@ check_scan() {
 #--------------------
 check_config() {
   if [[ -r $wi_conf ]]; then
-    . $wi_conf && return
+    . $wi_conf
+    [[ $color == true ]] && init_color
+    return
   fi 
-  echo -e "$green[Created new configuration file at $wi_conf]$reset"
   mkdir -p $wi_home
   touch $wi_conf
   write_default_config
+  echo -e "$green[Created new configuration file at $wi_conf]$reset"
 }
 
 write_default_config() {
-  write "# wi configuration file"
+  write "#"
+  write "# wi.conf - wi configuration file"
+  write "#"
   write ""
-  write "# use color? true/false"
+  write "# output color? true/false"
   write "color=false"
+  write ""
+  write "# vim : set ft=sh ts=2 sw=2 et:"
 }
 
 write() {
@@ -223,7 +238,7 @@ write() {
 #------------------
 ensure_root() {
   if [[ $EUID -ne 0 ]];then
-    echo -e "$red[You must be root to manage network interfaces]$reset" && exit $not_root
+    echo -e "$yellow[You must be root to manage network interfaces]$reset" && exit $not_root
   fi
 }
 
@@ -233,14 +248,14 @@ validate_essid() {
     do
       [[ "ESSID:$essid" == "$scanned_essid" ]] && return
     done
-  echo -e "$red[Network \"${yellow}$essid${red}\" not found]$reset"
+  echo -e "$yellow[Network \"${yellow}$essid${red}\" not found]$reset"
   exit $network_not_found
 }
 
 validate_interface() {
   ip link show dev $iface &>/dev/null
   [[ $? -eq 0 ]] && return
-  echo -e "$red[Network interface \"${yellow}$iface$red\" not detected]$reset"
+  echo -e "$yellow[Network interface \"${yellow}$iface$red\" not detected]$reset"
   exit $interface_not_found
 }
 
@@ -356,6 +371,7 @@ connect_wireless_WEP_dhcp() {
   echo -e "$green[Putting $iface up]$reset" && set_interface_up
   sleep 1
   echo -e "$green[Acquiring IP address]$reset" && start_dhcpcd
+  sleep 1
   test_connection
 }
 
