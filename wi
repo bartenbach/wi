@@ -400,7 +400,7 @@ connect_wireless_WEP() {
 #-------------------------
 connect_wireless_wpa() {
   assign_arguments $*
-  verify_iface_essid_enc
+  verify_iface_essid
   generic_wireless
   set_wpa_key
   start_wpa_supplicant
