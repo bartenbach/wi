@@ -88,6 +88,7 @@ parse_arguments_case() { #//TODO why am I using if/else ?
 }
 
 parse_arguments() {
+  check_config
   if [[ $1 == '--version' ]];then
     echo "v$version" && exit 0
   elif [[ $1 == '-h' ]] || [[ $1 == '--help' ]];then
@@ -285,7 +286,7 @@ dhcp_persist() {
 # Generic connection functions
 #------------------------------
 pre_connect() {
-  ensure_root && check_config
+  ensure_root #TODO I just made this obsolete
 }
 
 reset_environment() {
@@ -376,7 +377,8 @@ connect_wireless_wpa_dhcp() {
   retry_if_needed
 }
 
-set_wpa_key() {
+set_wpa_key() { #//TODO nice embarassing fail here...
+  [[ -r /etc/wpa_supplicant.conf ]] || touch /etc/wpa_supplicant.conf
   cat /etc/wpa_supplicant.conf | grep $essid &>/dev/null
   if [[ $? != 0 ]];then
     if [[ -z $enc ]];then
