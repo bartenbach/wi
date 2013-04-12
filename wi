@@ -74,12 +74,12 @@ main() {
 #-------
 # Usage
 #-------
-
 # $1 - The exit code to exit with
 echo_usage() {
   echo -e "Usage: wi [arguments]"
   echo -e "  -a, --wpa interface essid pass  Connect to a WPA secured network using the"
   echo -e "                                  password 'pass' "
+  echo -e "  -d, --disconnect                Disconnect active network connection"
   echo -e "  -e, --wep interface essid pass  Connect to a WEP secured network using the"
   echo -e "                                  password 'pass'"
   echo -e "  -h, --help                      Show this menu"
@@ -119,19 +119,20 @@ parse_arguments() {
   while :
     do
       case $1 in
-        -w | --wired   ) connect_wired "$@"         ;;
-        -a | --wpa     ) connect_wireless_wpa "$@"  ;;
-        -e | --wep     ) connect_wireless_wep "$@"  ;;
-        -o | --open    ) connect_wireless_open "$@" ;;
-        -p | --profile ) profile handler            ;; #TODO
-        -t | --test    ) test_connection            ;;
-        -s | --scan    ) scan "$@"                  ;;
-        -h | --help    ) echo_usage 0               ;;
-        --version      ) echo_version               ;;
-        -*             ) unknown_option "$1"        ;;
-        *              ) echo_usage $NO_ARGUMENTS   ;;
+        -a | --wpa        ) connect_wireless_wpa "$@"  ;;
+        -d | --disconnect ) disconnect "$@"            ;;
+        -e | --wep        ) connect_wireless_wep "$@"  ;;
+        -h | --help       ) echo_usage 0               ;;
+        -o | --open       ) connect_wireless_open "$@" ;;
+        -p | --profile    ) profile handler            ;; #TODO
+        -s | --scan       ) scan "$@"                  ;;
+        -t | --test       ) test_connection            ;;
+        -w | --wired      ) connect_wired "$@"         ;;
+        --version         ) echo_version               ;;
+        -*                ) unknown_option "$1"        ;;
+        *                 ) echo_usage $NO_ARGUMENTS   ;;
       esac
-    done  
+    done
 }
 
 function exit_args {
@@ -209,9 +210,9 @@ test_connection() {
   exit 0
 }
 
-#----------
+#------
 # Scan
-#----------
+#------
 scan() {
   assign_arguments "$@"
   verify_iface
@@ -224,6 +225,14 @@ scan() {
   # it needs to print out encryption details, and probably some other important data.
   # it should also print nothing if the scan has failed
   check_scan
+}
+
+#------------
+# Disconnect
+#------------
+# TODO Should this accept an interface, profile, or should I try to detect this ?
+function disconnect {
+  :
 }
 
 #--------------------
