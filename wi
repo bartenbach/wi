@@ -436,7 +436,8 @@ connect_wireless_wpa() {
   retry_if_needed
 }
 
-set_wpa_key() {
+set_wpa_key() { #//TODO nice embarassing fail here...
+  [[ -r /etc/wpa_supplicant.conf ]] || touch /etc/wpa_supplicant.conf
   cat /etc/wpa_supplicant.conf | grep $essid &>/dev/null
   if [[ $? != 0 ]];then
     if [[ -z $enc ]];then
