@@ -215,7 +215,12 @@ scan() {
 # Configuration file
 #--------------------
 check_config() {
-  if [[ -r $wi_conf ]]; then
+  if [[ $EUID -ne 0 && ! -f /etc/wi ]]; then
+    echo ""
+    echo -e "$red[Please run wi as root to create configuration files]$reset"
+    echo ""
+    return
+  elif [[ -r $wi_conf ]]; then
     . $wi_conf
     [[ $color == true ]] && init_color
     return
@@ -271,7 +276,7 @@ validate_interface() {
 }
 
 verify_args() {
-  echo "Could this be done better?"
+  echo "Could this be done better?" # see 3 functions below.
 }
 
 verify_iface(){
@@ -338,7 +343,8 @@ retry_if_needed() {
   if [[ $? -eq 1 ]];then
     dhcp_persist
   else
-    echo "$red[Error] dhcpcd exited $?$reset"
+    echo -e "$red[Error] dhcpcd error. exit: $?$reset"
+    exit $cannot_start_dhcpcd
   fi
 }
 
