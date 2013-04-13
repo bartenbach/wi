@@ -20,19 +20,40 @@
 #-----------
 # Todo list
 #-----------
-# TODO test connection before connecting to avoid redundancy
+# TODO test connection before connecting to avoid redundancy?
 # FIXME - this requires a test that times out, unlike ping
 # TODO Progress bar?
 # TODO Connectivity testing loop
 
-#-----------
-# Variables
-#-----------
-version='0.0.8-indev'
-wi_home="/etc/wi"
-wi_conf="$wi_home/wi.conf"
-wi_profile_dir="$wi_home/profile"
-wi_profile_example="$wi_home/example"
+#------------------
+# Global Variables
+#------------------
+declare -r VERSION='0.1.1-indev'
+declare -r WI_HOME='/etc/wi'
+declare -r WI_CONF="$WI_HOME/wi.conf"
+declare -r WI_PROFILE_DIR="$WI_HOME/profile"
+declare -r WI_PROFILE_EXAMPLE="$WI_HOME/example"
+
+#------------
+# Exit codes
+#------------
+declare -i -r NOT_ROOT=10    
+declare -i -r INTERFACE_NOT_FOUND=15       
+declare -i -r NO_ARGUMENTS=20             
+declare -i -r MISSING_ARGUMENTS=25       
+declare -i -r UNKNOWN_ARGUMENT=27       
+declare -i -r NO_CONNECTION=30         
+declare -i -r CANNOT_SET_INTERFACE_DOWN=40  
+declare -i -r CANNOT_ASSOCIATE_WITH_ESSID=50
+declare -i -r CANNOT_SET_INTERFACE_UP=60   
+declare -i -r CANNOT_START_DHCPCD=65      
+declare -i -r NETWORK_NOT_FOUND=70       
+declare -i -r CANNOT_SET_WEP_KEY=90     
+declare -i -r IWLIST_SCAN_FAILED=100 
+
+#----------------------
+# Connection Variables
+#----------------------
 connection_type='' # wired-dhcp/wireless-wpa/wireless-wep
 description=''     # not parsed, optional
 iface=''           # interface
@@ -40,94 +61,88 @@ essid=''           # essid
 enc=''             # encryption open/wpa/wep
 ip=''              # static ip
 hidden=''          # hidden essid
-color=''           # use color true/false
-green=''
-red=''
-yellow=''
-reset=''
 
-#------------
-# Exit codes
-#------------
-not_root=10                    # User needed to be root and was not
-interface_not_found=15         # The interface supplied does not exist
-no_arguments=20                # No arguments were supplied
-missing_arguments=25           # An argument is missing
-unknown_argument=27            # unrecognized argument supplied
-no_connection=30               # We exited without obtaining a connection
-no_enc=35                      # Encryption key not supplied and is required
-cannot_set_interface_down=40   # Shell returned non-zero on set down attempt
-cannot_associate_with_essid=50 # Problem associating with the ESSID
-cannot_set_interface_up=60     # Shell returned non-zero on set up attempt
-cannot_start_dhcpcd=65         # Shell returned non-zero starting dhcpcd
-network_not_found=70           # Failed to find ESSID via iwlist scan
-cannot_set_wep_key=90          # Unable to set wep key
-iwlist_scan_failed=100         # scanning with iwlist failed
+#------
+# Main
+#------
+# $@ The arguments to parse
+main() {
+  check_config
+  parse_arguments "$@"
+}
 
 #-------
 # Usage
 #-------
+# $1 - The exit code to exit with
 echo_usage() {
   echo -e "Usage: wi [arguments]"
-  echo -e "  -p, --profile filename          Connect using the following profile"
-  echo -e "  -o, --open interface essid      Connect to an open or unsecured wireless"
-  echo -e "                                  network via dhcp"
-  echo -e "  -e, --wep interface essid pass  Connect to a WEP secured network using the"
-  echo -e "                                  password 'pass'"
   echo -e "  -a, --wpa interface essid pass  Connect to a WPA secured network using the"
   echo -e "                                  password 'pass' "
+  echo -e "  -d, --disconnect                Disconnect active network connection"
+  echo -e "  -e, --wep interface essid pass  Connect to a WEP secured network using the"
+  echo -e "                                  password 'pass'"
+  echo -e "  -h, --help                      Show this menu"
+  echo -e "  -o, --open interface essid      Connect to an open or unsecured wireless"
+  echo -e "                                  network via dhcp"
+  echo -e "  -p, --profile filename          Connect using the following profile"
+  echo -e "  -s, --scan interface            Scan for wireless networks with interface"
+  echo -e "  -t, --test                      Check for a current internet connection"
   echo -e "  -w, --wired interface           Connect to a wired network using interface"
   echo -e "                                  via dhcp "
-  echo -e "  -t, --test                      Check for a current internet connection"
-  echo -e "  -s, --scan interface            Scan for wireless networks with interface"
-  echo -e "  -h, --help                      Show this menu"
-  echo -e "  --version                       Print the current version of wi"
+  echo -e "  --version                       Print the version of this program"
   exit $1
 }
 
+# $1 - The option that was unknown
 unknown_option() {
   echo "Unknown option: $1"
-  echo_usage $unknown_argument
+  echo_usage $UNKNOWN_ARGUMENT
 }
 
-echo_version() {
-  echo -e "v$version" && exit 0
+function echo_version {
+  echo -e "v$VERSION"
 }
 
-init_color() {
-  green='\e[0;32m'
+function init_color {
   red='\e[0;31m'
-  yellow='\e[0;93m'
+  green='\e[0;32m'
+  yellow='\e[0;33m'
   reset='\e[0m'  
 }
 
 #-----------------
 # Parse arguments
 #-----------------
+# $@ - The arguments to parse
 parse_arguments() {
   while :
     do
       case $1 in
-        -w | --wired   ) connect_wired $*         ;;
-        -a | --wpa     ) connect_wireless_wpa $*  ;;
-        -e | --wep     ) connect_wireless_wep $*  ;;
-        -o | --open    ) connect_wireless_open $* ;;
-        -p | --profile ) profile handler          ;; #TODO
-        -t | --test    ) test_connection          ;;
-        -s | --scan    ) scan $*                  ;;
-        -h | --help    ) echo_usage 0             ;;
-        --version      ) echo_version             ;;
-        -*             ) unknown_option $1        ;;
-        *              ) echo_usage $no_arguments ;;
+        -a | --wpa        ) connect_wireless_wpa "$@"  ;;
+        -d | --disconnect ) disconnect "$@"            ;;
+        -e | --wep        ) connect_wireless_wep "$@"  ;;
+        -h | --help       ) echo_usage 0               ;;
+        -o | --open       ) connect_wireless_open "$@" ;;
+        -p | --profile    ) profile handler            ;; #TODO
+        -s | --scan       ) scan "$@"                  ;;
+        -t | --test       ) test_connection            ;;
+        -w | --wired      ) connect_wired "$@"         ;;
+        --version         ) echo_version               ;;
+        -*                ) unknown_option "$1"        ;;
+        *                 ) echo_usage $NO_ARGUMENTS   ;;
       esac
-    done  
+    done
 }
 
-exit_args() {
+function exit_args {
   echo -e "$yellow[Missing argument]$reset"
-  echo_usage $missing_arguments
+  echo_usage $MISSING_ARGUMENTS
 }
 
+# $1 - The interface
+# $2 - The ESSID
+# $3 - The encrytion key
 assign_arguments() {
   iface=$2
   essid=$3
@@ -139,23 +154,24 @@ assign_arguments() {
 #---------------------
 set_interface_down() {
   ip l s $iface down &>/dev/null
-  check_exit $cannot_set_interface_down
+  check_exit $CANNOT_SET_INTERFACE_DOWN
 }
 
 set_interface_up() {
   ip l s $iface up &>/dev/null
-  check_exit $cannot_set_interface_up
+  check_exit $CANNOT_SET_INTERFACE_UP
 }
 
 associate_with_essid() {
   iwconfig $iface essid $essid &>/dev/null
-  check_exit $cannot_associate_with_essid
+  check_exit $CANNOT_ASSOCIATE_WITH_ESSID
 }
 
 start_dhcpcd() {
   dhcpcd -K -A -q $iface &>/dev/null
   if [[ $? -gt 1 ]];then
-    echo -e "$red[Error] exit: $?" && exit $?
+    echo -e "$red[Error] dhcpcd exited $?"
+    exit $CANNOT_START_DHCPCD
   fi
 }
 
@@ -166,7 +182,7 @@ kill_dhcpcd() {
 
 set_wep_encryption() {
   iwconfig $iface key $enc &>/dev/null
-  check_exit $cannot_set_wep_key
+  check_exit $CANNOT_SET_WEP_KEY
 }
 
 isUp() {
@@ -194,21 +210,29 @@ test_connection() {
   exit 0
 }
 
-#----------
+#------
 # Scan
-#----------
+#------
 scan() {
-  assign_arguments $*
+  assign_arguments "$@"
   verify_iface
   ensure_root
   isUp
-  echo -e "$green[Scanning for networks with $yellow$iface$reset]"
-  `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [\"]`
+  echo -e "$green[Scanning for networks with $yellow$iface$green]$reset"
+  iwlist $iface scan | grep ESSID
   # TODO this is totally fucked up
   # this needs to iterate through them one by one and avoid printing empty strings
   # it needs to print out encryption details, and probably some other important data.
   # it should also print nothing if the scan has failed
   check_scan
+}
+
+#------------
+# Disconnect
+#------------
+# TODO Should this accept an interface, profile, or should I try to detect this ?
+function disconnect {
+  :
 }
 
 #--------------------
@@ -220,17 +244,17 @@ check_config() {
     echo -e "$red[Please run wi as root to create configuration files]$reset"
     echo ""
     return
-  elif [[ -r $wi_conf ]]; then
-    . $wi_conf
+  elif [[ -r $WI_CONF ]]; then
+    . $WI_CONF
     [[ $color == true ]] && init_color
-    return
-  fi 
-  mkdir -p $wi_home
-  mkdir -p $wi_profile_dir
-  touch $wi_conf
-  touch $wi_profile_example
-  write_default_config
-  echo -e "$green[Created new configuration file at $wi_conf]$reset"
+  else 
+    mkdir -p $WI_HOME
+    mkdir -p $WI_PROFILE_DIR
+    touch $WI_CONF
+    touch $WI_PROFILE_EXAMPLE
+    write_default_config
+    echo -e "$green[Created new configuration file at $WI_CONF]$reset"
+  fi
 }
 
 write_default_config() {
@@ -239,13 +263,13 @@ write_default_config() {
   write "#"
   write ""
   write "# output color? true/false"
-  write "color=false"
+  write 'color="false"'
   write ""
   write "# vim : set ft=sh ts=2 sw=2 et:"
 }
 
 write() {
-  echo -e $1 >> $wi_conf  
+  echo $1 >> $WI_CONF  
 }
 
 #------------
@@ -254,25 +278,26 @@ write() {
 ensure_root() {
   if [[ $EUID -ne 0 ]];then
     echo -e "$yellow[You must be root to manage network interfaces]$reset"
-    exit $not_root
+    exit $NOT_ROOT
   fi
 }
 
 validate_essid() {
   isUp
+  local x
   for x in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [\"]`
     do
-      [[ "ESSID:$essid" == "$x" ]] && return
+      [[ "ESSID:$essid" == $x ]] && return
     done
   echo -e "$yellow[Network \"${yellow}$essid${red}\" not found]$reset"
-  exit $network_not_found
+  exit $NETWORK_NOT_FOUND
 }
 
 validate_interface() {
   ip link show dev $iface &>/dev/null
   [[ $? -eq 0 ]] && return
   echo -e "$yellow[Network interface \"${yellow}$iface$red\" not detected]$reset"
-  exit $interface_not_found
+  exit $INTERFACE_NOT_FOUND
 }
 
 verify_args() {
@@ -299,7 +324,7 @@ check_connection() {
   if [[ $? -eq 0 ]];then
     echo -e "$green[Connected to $essid]$reset" && exit 0
   else
-    return $no_connection
+    return $NO_CONNECTION
   fi
 }
 
@@ -310,25 +335,27 @@ check_exit() {
 }
 
 check_scan() {
-  if [[ $? -ne 0 ]];then
+  if [[ $? -eq 0 ]];then
     echo -e "$green[Scan complete]$reset" && exit 0
   fi
-  echo -e "$red[Scan failed]$reset" && exit $iwlist_scan_failed 
+  echo -e "$red[Scan failed]$reset" && exit $IWLIST_SCAN_FAILED 
 }
 
 #--------------------
 # Retry to get an IP //TODO Needs to be tested more
 #--------------------
 dhcp_persist() {
-  let j=1
-  while (( $j -lt 5 ))
+  local -i j=1
+  while (( $j < 6 ))
     do
       echo -e "$yellow[Failed to lease an IP]$reset"
       echo -e "$green[Retrying ($j/5)]$reset"
       retry_wireless_dhcp
       [[ $? -eq 0 ]] && exit 0
       ((j+=1))
-   done 
+    done
+  echo -e "$red[Unable to lease IP]$reset"
+  exit $NO_CONNECTION
 }
 
 #------------------------------
@@ -340,7 +367,7 @@ reset_environment() {
 }
 
 retry_if_needed() {
-  if [[ $? -eq 1 ]];then
+  if [[ $? -eq $NO_CONNECTION ]];then
     dhcp_persist
   else
     echo -e "$red[Error] dhcpcd error. exit: $?$reset"
@@ -362,7 +389,7 @@ generic_wireless() {
 # Wireless dhcp connection
 #--------------------------
 connect_wireless_open() {
-  assign_arguments $*
+  assign_arguments "$@"
   verify_iface_essid
   generic_wireless
   echo -e "$green[Putting $iface up]$reset" && set_interface_up
@@ -376,7 +403,7 @@ retry_wireless_dhcp() {
   validate_essid
   reset_environment
   sleep 1
-  associate
+  associate_with_essid
   sleep 1
   set_interface_up
   sleep 1
@@ -389,7 +416,7 @@ retry_wireless_dhcp() {
 # Wireless WEP connection
 #-------------------------
 connect_wireless_WEP() {
-  assign_arguments $*
+  assign_arguments "$@"
   verify_iface_essid_enc
   generic_wireless
   echo -e "$green[Setting WEP encyption]$reset" && set_wep_encryption
@@ -405,7 +432,7 @@ connect_wireless_WEP() {
 # Wireless WPA connection
 #-------------------------
 connect_wireless_wpa() {
-  assign_arguments $*
+  assign_arguments "$@"
   verify_iface_essid
   generic_wireless
   set_wpa_key
@@ -442,7 +469,7 @@ start_wpa_supplicant() {
 #------------------------
 connect_wired() {
   ensure_root
-  assign_arguments $*
+  assign_arguments "$@"
   verify_iface
   validate_interface
   echo -e "$green[Resetting environment]$reset" && reset_environment
@@ -457,5 +484,4 @@ connect_wired() {
 #-----
 # Run
 #-----
-check_config
-parse_arguments $*
+main "$@"
