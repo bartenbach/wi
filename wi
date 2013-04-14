@@ -42,7 +42,8 @@ declare -i -r INTERFACE_NOT_FOUND=15
 declare -i -r NO_ARGUMENTS=20             
 declare -i -r MISSING_ARGUMENTS=25       
 declare -i -r UNKNOWN_ARGUMENT=27       
-declare -i -r NO_CONNECTION=30         
+declare -i -r NO_CONNECTION=30
+declare -i -r PROFILE_NOT_FOUND=35
 declare -i -r CANNOT_SET_INTERFACE_DOWN=40  
 declare -i -r CANNOT_ASSOCIATE_WITH_ESSID=50
 declare -i -r CANNOT_SET_INTERFACE_UP=60   
@@ -54,8 +55,8 @@ declare -i -r IWLIST_SCAN_FAILED=100
 #----------------------
 # Connection Variables
 #----------------------
-connection_type='' # wired-dhcp/wireless-wpa/wireless-wep
-description=''     # not parsed, optional
+CONNECTION_TYPE='' # wired-dhcp/wireless-wpa/wireless-wep
+DESCRIPTION=''     # not parsed, optional
 iface=''           # interface
 essid=''           # essid
 enc=''             # encryption open/wpa/wep
@@ -124,7 +125,7 @@ parse_arguments() {
         -e | --wep        ) connect_wireless_wep "$@"  ;;
         -h | --help       ) echo_usage 0               ;;
         -o | --open       ) connect_wireless_open "$@" ;;
-        -p | --profile    ) profile handler            ;; #TODO
+        -p | --profile    ) handle_profile "$@"        ;;
         -s | --scan       ) scan "$@"                  ;;
         -t | --test       ) test_connection            ;;
         -w | --wired      ) connect_wired "$@"         ;;
@@ -195,6 +196,39 @@ isUp() {
 
 ping_check() {
   ping -c1 -W1 google.com &>/dev/null
+}
+
+#---------
+# Profile
+#---------
+# $1 The profile to start
+handle_profile() {
+  ensure_root
+  PROFILE="$2"
+  validate_profile $PROFILE
+}
+
+validate_profile() {
+  if [[ -f "$WI_PROFILE_DIR/$PROFILE" ]]; then
+    source "$WI_PROFILE_DIR/$PROFILE"
+    profile_type
+  else
+    echo -e "$red[Cannot find $yellow$WI_PROFILE_DIR/$PROFILE$red]$reset"
+    exit $PROFILE_NOT_FOUND
+  fi
+}
+
+function profile_type {
+  case $CONNECTION_TYPE in
+    wireless-wpa  ) connect_wireless_wpa X $INTERFACE $ESSID $ENCRYPTION_KEY ; break ;;
+    wireless-open ) connect_wireless_open X $INTERFACE $ESSID ; break ;;
+    wired         ) connect_wired X $INTERFACE ; break ;;
+  esac
+}
+
+function wireless-wpa_handler {
+  verify_iface_essid_enc
+
 }
 
 #------
@@ -289,14 +323,14 @@ validate_essid() {
     do
       [[ "ESSID:$essid" == $x ]] && return
     done
-  echo -e "$yellow[Network \"${yellow}$essid${red}\" not found]$reset"
+  echo -e "$red[Network \"${yellow}$essid${red}\" not found]$reset"
   exit $NETWORK_NOT_FOUND
 }
 
 validate_interface() {
   ip link show dev $iface &>/dev/null
   [[ $? -eq 0 ]] && return
-  echo -e "$yellow[Network interface \"${yellow}$iface$red\" not detected]$reset"
+  echo -e "$red[Network interface \"${yellow}$iface$red\" not detected]$reset"
   exit $INTERFACE_NOT_FOUND
 }
 
