@@ -20,15 +20,18 @@
 #-----------
 # Todo list
 #-----------
-# TODO test connection before connecting to avoid redundancy?
-# FIXME - this requires a test that times out, unlike ping
-# TODO Progress bar?
-# TODO Connectivity testing loop
+#TODO add hidden option to cli?
+# TODO Connectivity testing daemon? auto-reconnect?
+
+#-----------
+# Changelog
+#-----------
+# Profiles now respect the hidden option.  true/false
 
 #------------------
 # Global Variables
 #------------------
-declare -r VERSION='0.1.1-indev'
+declare -r VERSION='0.1.3-indev'
 declare -r WI_HOME='/etc/wi'
 declare -r WI_CONF="$WI_HOME/wi.conf"
 declare -r WI_PROFILE_DIR="$WI_HOME/profile"
@@ -154,22 +157,22 @@ assign_arguments() {
 # Interface functions
 #---------------------
 set_interface_down() {
-  ip l s $iface down &>/dev/null
+  ip l s "$iface" down &>/dev/null
   check_exit $CANNOT_SET_INTERFACE_DOWN
 }
 
 set_interface_up() {
-  ip l s $iface up &>/dev/null
+  ip l s "$iface" up &>/dev/null
   check_exit $CANNOT_SET_INTERFACE_UP
 }
 
 associate_with_essid() {
-  iwconfig $iface essid $essid &>/dev/null
+  iwconfig "$iface" essid "$essid" &>/dev/null
   check_exit $CANNOT_ASSOCIATE_WITH_ESSID
 }
 
 start_dhcpcd() {
-  dhcpcd -K -A -q $iface &>/dev/null
+  dhcpcd -K -A -q "$iface" &>/dev/null
   if [[ $? -gt 1 ]];then
     echo -e "$red[Error] dhcpcd exited $?"
     exit $CANNOT_START_DHCPCD
@@ -182,12 +185,12 @@ kill_dhcpcd() {
 }
 
 set_wep_encryption() {
-  iwconfig $iface key $enc &>/dev/null
+  iwconfig "$iface" key "$enc" &>/dev/null
   check_exit $CANNOT_SET_WEP_KEY
 }
 
 isUp() {
-  `ip link show up | grep $iface &>/dev/null`
+  `ip link show up | grep "$iface" &>/dev/null`
   if [[ $? -ne 0 ]];then
     set_interface_up
     sleep 1
@@ -195,7 +198,8 @@ isUp() {
 }
 
 ping_check() {
-  ping -c1 -W1 google.com &>/dev/null
+#  ping -c1 -W1 google.com &>/dev/null
+  ping -c1 -W1 $(route -n | grep 'UG[ \t]' | awk '{print $2}') &>/dev/null
 }
 
 #---------
@@ -266,7 +270,7 @@ scan() {
 #------------
 # TODO Should this accept an interface, profile, or should I try to detect this ?
 function disconnect {
-  :
+  kill_dhcpcd
 }
 
 #--------------------
@@ -303,7 +307,7 @@ write_default_config() {
 }
 
 write() {
-  echo $1 >> $WI_CONF  
+  echo "$1" >> "$WI_CONF"
 }
 
 #------------
@@ -317,18 +321,16 @@ ensure_root() {
 }
 
 validate_essid() {
+  [[ $hidden == "true" ]] && return
   isUp
-  local x
-  for x in `iwlist $iface scan | grep ESSID | tr -d [:blank:] | tr -d [\"]`
-    do
-      [[ "ESSID:$essid" == $x ]] && return
-    done
+  iwlist $iface scan | grep "$essid"
+  [[ $? -eq 0 ]] && return
   echo -e "$red[Network \"${yellow}$essid${red}\" not found]$reset"
   exit $NETWORK_NOT_FOUND
 }
 
 validate_interface() {
-  ip link show dev $iface &>/dev/null
+  ip link show dev "$iface" &>/dev/null
   [[ $? -eq 0 ]] && return
   echo -e "$red[Network interface \"${yellow}$iface$red\" not detected]$reset"
   exit $INTERFACE_NOT_FOUND
@@ -339,15 +341,15 @@ verify_args() {
 }
 
 verify_iface(){
-  [[ -z $iface ]] && exit_args
+  [[ -z "$iface" ]] && exit_args
 }
 
 verify_iface_essid() {
-  [[ -z $iface ]] || [[ -z $essid ]] && exit_args
+  [[ -z "$iface" ]] || [[ -z "$essid" ]] && exit_args
 }
 
 verify_iface_essid_enc() {
-  [[ -z $iface ]] || [[ -z $essid ]] || [[ -z $enc ]] && exit_args
+  [[ -z "$iface" ]] || [[ -z "$essid" ]] || [[ -z "$enc" ]] && exit_args
 }
 
 #--------
@@ -376,7 +378,7 @@ check_scan() {
 }
 
 #--------------------
-# Retry to get an IP //TODO Needs to be tested more
+# Retry to get an IP
 #--------------------
 dhcp_persist() {
   local -i j=1
@@ -424,6 +426,7 @@ generic_wireless() {
 #--------------------------
 connect_wireless_open() {
   assign_arguments "$@"
+  echo $essid
   verify_iface_essid
   generic_wireless
   echo -e "$green[Putting $iface up]$reset" && set_interface_up
@@ -434,7 +437,6 @@ connect_wireless_open() {
 }
 
 retry_wireless_dhcp() {
-  validate_essid
   reset_environment
   sleep 1
   associate_with_essid
